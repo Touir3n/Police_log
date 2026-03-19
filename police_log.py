@@ -174,8 +174,6 @@ class DutyLogApp:
 
     def main_interface(self):
         top_bar = ctk.CTkFrame(self.root, fg_color="transparent", height=50); top_bar.pack(fill="x", padx=15, pady=(10, 5))
-        
-        # --- Χρήση color tuples (LightColor, DarkColor) για τα πάνω κουμπιά ---
         ctk.CTkButton(top_bar, text="🚪 Έξοδος", command=self.login_screen, fg_color=("gray75", "#444"), text_color=("black", "white"), width=100, height=40, font=("Arial", 15, "bold")).pack(side="left")
         
         btn_text = "☀️ Light Mode" if self.is_dark_mode else "🌙 Dark Mode"
@@ -191,13 +189,11 @@ class DutyLogApp:
         ctk.CTkLabel(left, text=self.dept_name, font=("Arial", 36, "bold"), text_color="#5ca9e6").pack(pady=(0, 2))
         greeting_text = f"{self.get_time_greeting()}! Καλή βάρδια."
         
-        # --- Χρήση color tuple (LightColor, DarkColor) για το χαιρετισμό ---
         ctk.CTkLabel(left, text=greeting_text, font=("Arial", 18, "italic"), text_color=("gray50", "#aaaaaa")).pack(pady=(0, 10))
         
         ib = ctk.CTkFrame(left, height=55); ib.pack(fill="x", pady=5)
         ctk.CTkLabel(ib, text=f"Αξιωματικός Υπηρεσίας: {self.current_officer}", font=("Arial", 16, "bold")).pack(side="left", padx=15, pady=5)
         
-        # --- Χρήση color tuple στο εικονίδιο 🔑 ---
         ctk.CTkButton(ib, text="🔑", fg_color=("gray75", "#444"), text_color=("black", "white"), width=35, height=30, command=self.change_password_dialog).pack(side="left")
         
         ir = ctk.CTkFrame(ib, fg_color="transparent"); ir.pack(side="right", fill="y", padx=10)
@@ -247,7 +243,6 @@ class DutyLogApp:
         
         ctk.CTkButton(btn_row, text="💾 Καταχώρηση Συμβάντος", command=self.submit_incident, width=250, height=50, font=("Arial", 16, "bold")).pack(side="right")
 
-        # --- ΧΡΗΣΗ COLOR TUPLE ΣΤΗ ΔΕΞΙΑ ΣΤΗΛΗ ΓΙΑ ΣΩΣΤΟ LIGHT MODE ---
         right = ctk.CTkFrame(mc, width=400, fg_color=("gray85", "#222"))
         right.pack_propagate(False); right.pack(side="right", fill="y")
         
@@ -374,29 +369,62 @@ class DutyLogApp:
         if messagebox.askyesno("Κλείδωμα", "Οριστικό κλείδωμα βάρδιας;"):
             conn = sqlite3.connect('police_log.db'); cursor = conn.cursor(); cursor.execute('UPDATE incidents SET is_closed=1 WHERE officer_name=? AND shift_date=? AND shift_hours=?', (self.current_officer, self.entry_date.get(), self.combo_shift.get())); conn.commit(); conn.close(); self.refresh_live_view()
 
+    # --- ΕΝΗΜΕΡΩΜΕΝΗ ΑΝΑΖΗΤΗΣΗ ΜΕ ΠΕΔΙΑ ΑΠΟ - ΕΩΣ ---
     def open_search_window(self):
         sw = ctk.CTkToplevel(self.root); sw.title("Ιστορικό"); sw.geometry("1200x800"); sw.state('zoomed'); sw.grab_set()
         f = ctk.CTkFrame(sw); f.pack(fill="x", padx=20, pady=20)
-        e_d = ctk.CTkEntry(f, width=130, height=45, font=("Arial", 16), justify="center"); e_d.pack(side="left", padx=5)
-        def open_cal():
+        
+        def open_cal_search(entry_widget):
             top = ctk.CTkToplevel(sw); top.geometry("350x350"); top.grab_set(); from tkcalendar import Calendar
             cal = Calendar(top, selectmode='day', date_pattern='dd/mm/yyyy', font="Arial 12"); cal.pack(fill="both", expand=True)
-            def set_d(): e_d.delete(0, "end"); e_d.insert(0, cal.get_date()); top.destroy()
+            def set_d(): entry_widget.delete(0, "end"); entry_widget.insert(0, cal.get_date()); top.destroy()
             ctk.CTkButton(top, text="Επιλογή", command=set_d, height=40).pack(pady=10)
-        ctk.CTkButton(f, text="📅", width=45, height=45, command=open_cal, font=("Arial", 18)).pack(side="left", padx=10)
+
+        ctk.CTkLabel(f, text="Από:", font=("Arial", 15, "bold")).pack(side="left", padx=(10, 5))
+        e_d_from = ctk.CTkEntry(f, width=120, height=45, font=("Arial", 15), justify="center"); e_d_from.pack(side="left")
+        ctk.CTkButton(f, text="📅", width=40, height=45, command=lambda: open_cal_search(e_d_from), font=("Arial", 18)).pack(side="left", padx=5)
+        
+        ctk.CTkLabel(f, text="Έως:", font=("Arial", 15, "bold")).pack(side="left", padx=(10, 5))
+        e_d_to = ctk.CTkEntry(f, width=120, height=45, font=("Arial", 15), justify="center"); e_d_to.pack(side="left")
+        ctk.CTkButton(f, text="📅", width=40, height=45, command=lambda: open_cal_search(e_d_to), font=("Arial", 18)).pack(side="left", padx=5)
+
         off_list = ["Όλοι"] + get_all_officers_list() if self.is_admin else [self.current_officer]
-        cb = ctk.CTkComboBox(f, values=off_list, width=300, height=45, font=("Arial", 16)); cb.set("Όλοι" if self.is_admin else self.current_officer); cb.pack(side="left", padx=10)
+        cb = ctk.CTkComboBox(f, values=off_list, width=220, height=45, font=("Arial", 15)); cb.set("Όλοι" if self.is_admin else self.current_officer); cb.pack(side="left", padx=10)
         if not self.is_admin: cb.configure(state="disabled")
-        e_k = ctk.CTkEntry(f, placeholder_text="Αναζήτηση...", width=300, height=45, font=("Arial", 16)); e_k.pack(side="left", padx=10)
+        
+        e_k = ctk.CTkEntry(f, placeholder_text="Αναζήτηση...", width=200, height=45, font=("Arial", 15)); e_k.pack(side="left", padx=10)
+        
         def run():
             for i in tr.get_children(): tr.delete(i)
-            conn = sqlite3.connect('police_log.db'); c = conn.cursor(); q = "SELECT shift_date, shift_hours, officer_name, MAX(is_closed) FROM incidents WHERE 1=1"
-            if e_d.get(): q += f" AND shift_date='{e_d.get()}'"
-            if cb.get() != "Όλοι": q += f" AND officer_name='{cb.get()}'"
-            if e_k.get(): q += f" AND (description LIKE '%{e_k.get()}%' OR title LIKE '%{e_k.get()}%')"
-            q += " GROUP BY shift_date, shift_hours, officer_name ORDER BY shift_date DESC"; c.execute(q)
+            conn = sqlite3.connect('police_log.db'); c = conn.cursor()
+            q = "SELECT shift_date, shift_hours, officer_name, MAX(is_closed) FROM incidents WHERE 1=1"
+            params = []
+            
+            if e_d_from.get():
+                d = e_d_from.get().split('/')
+                if len(d) == 3:
+                    q += " AND substr(shift_date,7,4)||'-'||substr(shift_date,4,2)||'-'||substr(shift_date,1,2) >= ?"
+                    params.append(f"{d[2]}-{d[1]}-{d[0]}")
+                    
+            if e_d_to.get():
+                d = e_d_to.get().split('/')
+                if len(d) == 3:
+                    q += " AND substr(shift_date,7,4)||'-'||substr(shift_date,4,2)||'-'||substr(shift_date,1,2) <= ?"
+                    params.append(f"{d[2]}-{d[1]}-{d[0]}")
+                    
+            if cb.get() != "Όλοι":
+                q += " AND officer_name=?"
+                params.append(cb.get())
+                
+            if e_k.get():
+                q += " AND (description LIKE ? OR title LIKE ?)"
+                params.extend([f"%{e_k.get()}%", f"%{e_k.get()}%"])
+                
+            q += " GROUP BY shift_date, shift_hours, officer_name ORDER BY substr(shift_date,7,4)||'-'||substr(shift_date,4,2)||'-'||substr(shift_date,1,2) DESC, shift_hours DESC"
+            c.execute(q, params)
             for r in c.fetchall(): tr.insert("", "end", values=(r[0], r[1], r[2], "🔒 Κλειδωμένη" if r[3] else "✏️ Ανοιχτή"))
             conn.close()
+            
         ctk.CTkButton(f, text="🔍", command=run, width=80, height=45).pack(side="left", padx=10)
         tr = ttk.Treeview(sw, columns=("d","h","off","st"), show="headings"); tr.heading("d", text="Ημερομηνία"); tr.heading("h", text="Βάρδια"); tr.heading("off", text="Αξιωματικός Υπηρεσίας"); tr.heading("st", text="Κατάσταση"); tr.pack(fill="both", expand=True, padx=20, pady=10)
         tr.bind("<Double-1>", lambda e: self.open_detailed_report(tr))
